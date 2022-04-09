@@ -37,7 +37,6 @@ import org.apache.johnzon.mapper.MapperConfig;
 import org.apache.johnzon.mapper.ObjectConverter;
 import org.apache.johnzon.mapper.SerializeValueFilter;
 import org.apache.johnzon.mapper.access.AccessMode;
-import org.apache.johnzon.mapper.access.FieldAndMethodAccessMode;
 import org.apache.johnzon.mapper.converter.LocaleConverter;
 import org.apache.johnzon.mapper.internal.AdapterKey;
 
@@ -221,7 +220,7 @@ public class JohnzonBuilder implements JsonbBuilder {
                         factory, jsonp, builderFactorySupplier, parserFactoryProvider,
                         config.getProperty("johnzon.accessModeDelegate")
                                 .map(this::toAccessMode)
-                                .orElseGet(() -> new FieldAndMethodAccessMode(true, true, false)),
+                                .orElse(null),
                         // this changes in v3 of the spec so let's use this behavior which makes everyone happy by default
                         config.getProperty("johnzon.failOnMissingCreatorValues")
                                 .map(this::toBool)

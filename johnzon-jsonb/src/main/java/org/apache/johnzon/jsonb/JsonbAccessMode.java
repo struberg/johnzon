@@ -66,6 +66,7 @@ import javax.json.bind.annotation.JsonbTransient;
 import javax.json.bind.annotation.JsonbTypeAdapter;
 import javax.json.bind.annotation.JsonbTypeDeserializer;
 import javax.json.bind.annotation.JsonbTypeSerializer;
+import javax.json.bind.annotation.JsonbVisibility;
 import javax.json.bind.config.PropertyNamingStrategy;
 import javax.json.bind.config.PropertyOrderStrategy;
 import javax.json.bind.config.PropertyVisibilityStrategy;
@@ -127,7 +128,7 @@ import static java.util.stream.Collectors.toSet;
 import static org.apache.johnzon.mapper.reflection.Converters.matches;
 import static org.apache.johnzon.mapper.reflection.Records.isRecord;
 
-public class JsonbAccessMode implements AccessMode, Closeable {
+public class JsonbAccessMode extends FieldAndMethodAccessMode implements Closeable {
     private final PropertyNamingStrategy naming;
     private final String order;
     private final PropertyVisibilityStrategy visibility;
@@ -162,17 +163,18 @@ public class JsonbAccessMode implements AccessMode, Closeable {
                            final Map<AdapterKey, Adapter<?, ?>> defaultConverters, final JohnzonAdapterFactory factory,
                            final JsonProvider jsonProvider, final Supplier<JsonBuilderFactory> builderFactory,
                            final Supplier<JsonParserFactory> parserFactory,
-                           final AccessMode delegate,
+                           final AccessMode delegateAccessMode,
                            final boolean failOnMissingCreatorValues,
                            final boolean globalIsNillable,
                            final boolean supportsPrivateAccess) {
+        super(true, true, false);
         // CHECKSTYLE:ON
         this.globalIsNillable = globalIsNillable;
         this.naming = propertyNamingStrategy;
         this.order = orderValue;
         this.visibility = visibilityStrategy;
         this.caseSensitive = caseSensitive;
-        this.delegate = delegate;
+        this.delegate = delegateAccessMode;
         this.defaultConverters = defaultConverters;
         this.factory = factory;
         this.builderFactory = builderFactory;
@@ -300,7 +302,7 @@ public class JsonbAccessMode implements AccessMode, Closeable {
 
         if (constructor == null && factory == null && !invalidConstructorForDeserialization) {
             final Stream<Function<AnnotatedElement, String>> jsonbFn = Stream.of(this::getJsonbProperty);
-            final Factory delegateFactory = delegate.findFactory(
+            final Factory delegateFactory = super.findFactory(
                     clazz,
                     (parameterNameExtractors == null ?
                             jsonbFn : Stream.concat(jsonbFn, Stream.of(parameterNameExtractors))).toArray(Function[]::new));
@@ -497,8 +499,12 @@ public class JsonbAccessMode implements AccessMode, Closeable {
 
     @Override
     public Map<String, Reader> findReaders(final Class<?> clazz) {
-        final Map<String, Reader> readers = delegate.findReaders(clazz);
-
+        final Map<String, Reader> readers;
+        if (delegate != null) {
+            readers = delegate.findReaders(clazz);
+        } else {
+            readers = sanitize(clazz, doFindReaders(clazz, !clazz.isAnnotationPresent(JsonbVisibility.class)));
+        }
         final boolean record = isRecord(clazz) || Meta.getAnnotation(clazz, JohnzonRecord.class) != null;
         final Map<String, Parameter> recordParams = record ?
                 findRecordConstructor(clazz)
@@ -664,8 +670,12 @@ public class JsonbAccessMode implements AccessMode, Closeable {
 
     @Override
     public Map<String, Writer> findWriters(final Class<?> clazz) {
-        final Map<String, Writer> writers = delegate.findWriters(clazz);
-
+        final Map<String, Writer> writers;
+        if (delegate != null) {
+            writers = delegate.findWriters(clazz);
+        } else {
+            writers = super.findWriters(clazz);
+        }
         final Comparator<String> keyComparator = fieldComparator(clazz);
         final Map<String, Writer> result = keyComparator == null ? new HashMap<>() : new TreeMap<>(keyComparator);
         for (final Map.Entry<String, Writer> entry : writers.entrySet()) {

@@ -29,6 +29,7 @@ import java.beans.Introspector;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.HashMap;
@@ -46,9 +47,11 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
         this.methods = new MethodAccessMode(useConstructor, acceptHiddenConstructor, useGettersAsWriter);
     }
 
-
     @Override
     public Map<String, Reader> doFindReaders(final Class<?> clazz) {
+        return doFindReaders(clazz, false);
+    }
+    public Map<String, Reader> doFindReaders(final Class<?> clazz, final boolean alwaysPreferMethodVisibility ) {
         final Map<String, Reader> methodReaders = this.methods.findReaders(clazz);
         final boolean record = isRecord(clazz);
         if (record) {
@@ -61,13 +64,13 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
         for (final Map.Entry<String, Reader> entry : fieldsReaders.entrySet()) {
             final String key = entry.getKey();
             Method m = record ?
-                    getMethod(key, clazz) :
-                    getMethod("get" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), clazz);
+                    getMethod(key, alwaysPreferMethodVisibility, clazz) :
+                    getMethod("get" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), alwaysPreferMethodVisibility, clazz);
             if (m == null && !record && (boolean.class == entry.getValue().getType() || Boolean.class == entry.getValue().getType())) {
-                m = getMethod("is" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), clazz);
+                m = getMethod("is" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), alwaysPreferMethodVisibility, clazz);
             }
             boolean skip = false;
-            if (m != null) {
+            if (m != null && Modifier.isPublic(m.getModifiers())) {
                 for (final Reader w : methodReaders.values()) {
                     if (MethodAccessMode.MethodDecoratedType.class.cast(w).getMethod().equals(m)) {
                         if (w.getAnnotation(JohnzonProperty.class) != null || w.getAnnotation(JohnzonIgnore.class) != null) {
@@ -76,6 +79,8 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
                         break;
                     }
                 }
+            } else if (m != null) { // skip even field
+                continue;
             }
             if (skip) {
                 continue;
@@ -121,10 +126,20 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
         return readers;
     }
 
-    private Method getMethod(final String methodName, final Class<?> type, final Class<?>... args) {
+    private Method getMethod(final String methodName, final boolean alwaysPreferMethodVisibility, final Class<?> type, final Class<?>... args) {
         try {
+            if (alwaysPreferMethodVisibility) {
+                return type.getDeclaredMethod(methodName, args);
+            }
             return type.getMethod(methodName, args);
         } catch (final NoSuchMethodException e) {
+            if (alwaysPreferMethodVisibility) {
+                try {
+                    return type.getMethod(methodName, args);
+                } catch (final NoSuchMethodException e2) {
+                    // no-op
+                }
+            }
             return null;
         }
     }
@@ -151,9 +166,9 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
 
         for (final Map.Entry<String, Writer> entry : fieldWriters.entrySet()) {
             final String key = entry.getKey();
-            final Method m = getMethod("set" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), clazz, toType(entry.getValue().getType()));
+            final Method m = getMethod("set" + Character.toUpperCase(key.charAt(0)) + (key.length() > 1 ? key.substring(1) : ""), false, toType(entry.getValue().getType()));
             boolean skip = false;
-            if (m != null) {
+            if (m != null && Modifier.isPublic(m.getModifiers())) {
                 for (final Writer w : metodWriters.values()) {
                     if (MethodAccessMode.MethodDecoratedType.class.cast(w).getMethod().equals(m)) {
                         if (w.getAnnotation(JohnzonProperty.class) != null) {
@@ -162,6 +177,8 @@ public class FieldAndMethodAccessMode extends BaseAccessMode {
                         break;
                     }
                 }
+            } else if (m != null) {
+                continue;
             }
             if (skip) {
                 continue;

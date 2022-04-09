@@ -334,7 +334,7 @@ public abstract class BaseAccessMode implements AccessMode {
         return null;
     }
 
-    private <T> Map<String, T> sanitize(final Class<?> type, final Map<String, T> delegate) {
+    protected <T> Map<String, T> sanitize(final Class<?> type, final Map<String, T> delegate) {
         for (final String field : fieldFilteringStrategy.select(type)) {
             delegate.remove(field);
         }

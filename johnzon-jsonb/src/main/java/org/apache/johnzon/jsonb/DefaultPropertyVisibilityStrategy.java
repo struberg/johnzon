@@ -20,13 +20,9 @@ package org.apache.johnzon.jsonb;
 
 import static java.util.Optional.ofNullable;
 
-import java.beans.Introspector;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -36,8 +32,6 @@ import javax.json.bind.config.PropertyVisibilityStrategy;
 
 class DefaultPropertyVisibilityStrategy implements javax.json.bind.config.PropertyVisibilityStrategy {
     private final ConcurrentMap<Class<?>, PropertyVisibilityStrategy> strategies = new ConcurrentHashMap<>();
-    private final ConcurrentMap<Class<?>, List<String>> getters = new ConcurrentHashMap<>();
-
     private volatile boolean skipGetpackage;
 
     @Override
@@ -47,35 +41,7 @@ class DefaultPropertyVisibilityStrategy implements javax.json.bind.config.Proper
         }
         final PropertyVisibilityStrategy strategy = strategies.computeIfAbsent(
                 field.getDeclaringClass(), this::visibilityStrategy);
-        return strategy == this ? isFieldVisible(field) : strategy.isVisible(field);
-    }
-
-    private boolean isFieldVisible(Field field) {
-        if (!Modifier.isPublic(field.getModifiers())) {
-            return false;
-        }
-        // also check if there is any setter, in which case the field should be treated as non-visible as well.
-        return !getters.computeIfAbsent(field.getDeclaringClass(), this::calculateGetters).contains(field.getName());
-    }
-
-    /**
-     * Calculate all the getters of the given class.
-     */
-    private List<String> calculateGetters(Class<?> clazz) {
-        List<String> getters = new ArrayList<>();
-        for (Method m : clazz.getDeclaredMethods()) {
-            if (m.getParameterCount() == 0) {
-                if (m.getName().startsWith("get")) {
-                    getters.add(Introspector.decapitalize(m.getName().substring(3)));
-                } else if (m.getName().startsWith("is")) {
-                    getters.add(Introspector.decapitalize(m.getName().substring(2)));
-                }
-            }
-        }
-        if (clazz.getSuperclass() != Object.class) {
-            getters.addAll(calculateGetters(clazz.getSuperclass()));
-        }
-        return getters.isEmpty() ? Collections.emptyList() : getters;
+        return strategy == this ? Modifier.isPublic(field.getModifiers()) : strategy.isVisible(field);
     }
 
     @Override
